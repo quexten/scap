@@ -259,15 +259,24 @@ impl<'a> ScreenCastPortal<'a> {
             String::from("handle_token"),
             Variant(Box::new(self.token.clone())),
         );
-        map.insert(
-            String::from("types"),
-            Variant(Box::new(self.proxy.available_source_types()?)),
-        );
+        map.insert(String::from("types"), Variant(Box::new(1 as u32)));
         map.insert(String::from("multiple"), Variant(Box::new(false)));
         map.insert(
             String::from("cursor_mode"),
             Variant(Box::new(self.cursor_mode)),
         );
+
+        // read restore token
+        let homedir = std::env::var("HOME").unwrap();
+        let restore_token_path = format!("{}/.config/scap/restore_token", homedir);
+        if let Ok(restore_token) = std::fs::read_to_string(restore_token_path) {
+            map.insert(
+                String::from("restore_token"),
+                Variant(Box::new(restore_token)),
+            );
+        }
+        map.insert(String::from("persist_mode"), Variant(Box::new(2 as u32)));
+
         Ok(map)
     }
 
@@ -384,6 +393,14 @@ impl<'a> ScreenCastPortal<'a> {
 
         if let Some(res) = response.lock()?.take() {
             match_response!(res.response);
+            // restore token
+            if let Some(restore_token) = res.results.get("restore_token") {
+                let homedir = std::env::var("HOME").unwrap();
+                let restore_token_path = format!("{}/.config/scap/restore_token", homedir);
+                std::fs::create_dir_all(format!("{}/.config/scap", homedir)).unwrap();
+                std::fs::write(restore_token_path, restore_token.0.as_str().unwrap()).unwrap();
+            }
+
             match res.results.get("streams") {
                 Some(s) => match Stream::from_dbus(s) {
                     Some(s) => return Ok(s),
